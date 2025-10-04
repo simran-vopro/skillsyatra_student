@@ -1,531 +1,500 @@
-import React, { useState, useMemo } from "react";
-import { MessageSquare, ArrowLeft, Loader, User, Zap, BookOpen, X } from "lucide-react";
+import React, { useState, useMemo } from 'react';
+import { PlusCircle, Ticket, Clock, MessageSquare, AlertTriangle, ChevronDown, CheckCircle, XCircle, Loader, Filter, Send } from 'lucide-react';
 
-// --- TYPE DEFINITION ---
-interface Ticket {
+// Global variables for Firebase (not used in this mock, but kept for context)
+// const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+// --- TYPE DEFINITIONS & MOCK DATA ---
+
+type TicketStatus = 'Open' | 'In Progress' | 'Resolved' | 'Closed';
+type TicketType = 'Technical' | 'Payment' | 'Course Content' | 'Account' | 'Other';
+type ViewState = 'list' | 'new';
+
+interface Course {
+    id: string;
+    name: string;
+}
+
+interface SupportTicket {
     id: string;
     subject: string;
-    raisedBy: string;
-    role: string;
-    date: string;
-    status: "Open" | "In Progress" | "Resolved";
-    urgency: "High" | "Medium" | "Low";
-    assignedTo: string;
+    type: TicketType;
+    courseId?: string;
+    courseName?: string;
+    description: string;
+    status: TicketStatus;
+    lastUpdated: string; // ISO date string
+    priority: 'Low' | 'Medium' | 'High';
 }
 
-// --- DUMMY DATA ---
-const initialTickets: Ticket[] = [
+const MOCK_COURSES: Course[] = [
+    { id: 'C101', name: 'Intro to Web Development' },
+    { id: 'C205', name: 'Advanced React Hooks' },
+    { id: 'C310', name: 'Cloud Infrastructure Tier' },
+    { id: 'C400', name: 'Python for Data Science' },
+];
+
+const INITIAL_TICKETS: SupportTicket[] = [
     {
-        id: "TCK-101",
-        subject: "Unable to access JavaScript course modules",
-        raisedBy: "John Doe",
-        role: "Student",
-        date: "2025-03-10",
-        status: "Open",
-        urgency: "High",
-        assignedTo: "Unassigned",
+        id: 'TKT-001A',
+        subject: 'Cannot access lecture video 5 in C205',
+        type: 'Course Content',
+        courseId: 'C205',
+        courseName: 'Advanced React Hooks',
+        description: 'The video player just shows a black screen and an error message.',
+        status: 'Open',
+        lastUpdated: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+        priority: 'High',
     },
     {
-        id: "TCK-102",
-        subject: "Payment not reflecting after 48 hours",
-        raisedBy: "Sarah Lee",
-        role: "Student",
-        date: "2025-03-09",
-        status: "In Progress",
-        urgency: "Medium",
-        assignedTo: "Support Team A",
+        id: 'TKT-002B',
+        subject: 'Need invoice for March payment',
+        type: 'Payment',
+        courseId: 'C310',
+        courseName: 'Cloud Infrastructure Tier',
+        description: 'I need a PDF invoice for my last monthly subscription payment for tax purposes.',
+        status: 'In Progress',
+        lastUpdated: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+        priority: 'Medium',
     },
     {
-        id: "TCK-103",
-        subject: "Issue with assignment grading criteria for final project",
-        raisedBy: "Mark Smith",
-        role: "Instructor",
-        date: "2025-03-08",
-        status: "Resolved",
-        urgency: "Low",
-        assignedTo: "Support Team B",
-    },
-    {
-        id: "TCK-104",
-        subject: "Bug: Forum post button is not clickable on mobile",
-        raisedBy: "Jane Foster",
-        role: "Student",
-        date: "2025-03-07",
-        status: "Open",
-        urgency: "High",
-        assignedTo: "Unassigned",
-    },
-    {
-        id: "TCK-105",
-        subject: "Need access to archived data from 2024",
-        raisedBy: "Dr. Elena Rossi",
-        role: "Instructor",
-        date: "2025-03-06",
-        status: "In Progress",
-        urgency: "Medium",
-        assignedTo: "Support Team B",
+        id: 'TKT-003C',
+        subject: 'Login button is broken on mobile',
+        type: 'Technical',
+        description: 'When I try to log in on my iPhone, the login button is unresponsive.',
+        status: 'Resolved',
+        lastUpdated: new Date(Date.now() - 7 * 86400000).toISOString(), // 7 days ago
+        priority: 'Low',
     },
 ];
 
-// List of possible internal team members/roles for assignment
-const assigneeOptions = [
-    "Support Team A", 
-    "Support Team B", 
-    "Admin: Alice Johnson", 
-    "Admin: Bob Miller", 
-    "Instructor: Dr. Smith"
-];
+// --- UTILITY COMPONENTS ---
 
-// --- Custom Components for Tailwind Styling ---
+// Custom alert/message box implementation instead of window.alert()
+const useAppAlert = () => {
+    return (message: string, title: string = 'Information') => {
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
+        modal.innerHTML = `
+          <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full transform transition-all duration-300 scale-100">
+            <h3 class="text-xl font-bold mb-3 text-indigo-700">${title}</h3>
+            <p class="text-gray-700 text-sm">${message}</p>
+            <button id="closeAlert" class="mt-5 w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-md">
+              Close
+            </button>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        document.getElementById('closeAlert')?.addEventListener('click', () => document.body.removeChild(modal));
+    };
+};
 
-interface ChipProps {
-    label: string;
-    type: 'status' | 'urgency' | 'role';
+// Component to display status chips
+interface StatusChipProps {
+    status: TicketStatus;
 }
+const StatusChip: React.FC<StatusChipProps> = ({ status }) => {
+    let colorClasses = "bg-gray-100 text-gray-700 ring-gray-500/10";
+    let Icon = Loader;
 
-const TicketChip: React.FC<ChipProps> = ({ label, type }) => {
-    let colorClasses = "bg-gray-100 text-gray-700";
-    let Icon = null;
-
-    if (type === 'status') {
-        switch (label) {
-            case "Open":
-                colorClasses = "bg-amber-100 text-amber-700 ring-amber-500/10";
-                Icon = BookOpen;
-                break;
-            case "In Progress":
-                colorClasses = "bg-sky-100 text-sky-700 ring-sky-500/10";
-                Icon = Loader;
-                break;
-            case "Resolved":
-                colorClasses = "bg-green-100 text-green-700 ring-green-500/10";
-                Icon = Zap;
-                break;
-        }
-    } else if (type === 'urgency') {
-        switch (label) {
-            case "High":
-                colorClasses = "bg-red-100 text-red-700 ring-red-500/10";
-                Icon = Zap;
-                break;
-            case "Medium":
-                colorClasses = "bg-yellow-100 text-yellow-700 ring-yellow-500/10";
-                Icon = null; // No icon for Medium
-                break;
-            case "Low":
-                colorClasses = "bg-gray-100 text-gray-700 ring-gray-500/10";
-                Icon = null; // No icon for Low
-                break;
-        }
-    } else if (type === 'role') {
-        switch (label) {
-            case "Student":
-                colorClasses = "bg-indigo-100 text-indigo-700 ring-indigo-500/10";
-                Icon = User;
-                break;
-            case "Instructor":
-                colorClasses = "bg-purple-100 text-purple-700 ring-purple-500/10";
-                Icon = BookOpen;
-                break;
-        }
+    switch (status) {
+        case "Open":
+            colorClasses = "bg-red-100 text-red-700 ring-red-500/10";
+            Icon = AlertTriangle;
+            break;
+        case "In Progress":
+            colorClasses = "bg-blue-100 text-blue-700 ring-blue-500/10";
+            Icon = Loader;
+            break;
+        case "Resolved":
+            colorClasses = "bg-green-100 text-green-700 ring-green-500/10";
+            Icon = CheckCircle;
+            break;
+        case "Closed":
+            colorClasses = "bg-gray-200 text-gray-600 ring-gray-500/10";
+            Icon = XCircle;
+            break;
     }
 
     return (
         <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset ${colorClasses}`}>
-            {Icon && <Icon size={12} className="mr-1" />}
-            {label}
+            <Icon size={14} className="mr-1" /> {status}
         </span>
     );
 };
 
-// Custom Select Component for cleaner Tailwind styling
-interface CustomSelectProps {
-    label: string;
-    value: string;
-    onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
-    options: string[];
+// Component to display priority chips
+interface PriorityChipProps {
+    priority: 'Low' | 'Medium' | 'High';
 }
+const PriorityChip: React.FC<PriorityChipProps> = ({ priority }) => {
+    let colorClasses = "bg-gray-100 text-gray-700";
 
-const CustomSelect: React.FC<CustomSelectProps> = ({ label, value, onChange, options }) => (
-    <div className="relative w-full max-w-[160px] min-w-[120px]">
-        <label className="absolute -top-2 left-3 px-1 text-xs font-medium text-gray-500 bg-white z-10">{label}</label>
-        <select
-            value={value}
-            onChange={onChange}
-            className="w-full h-10 border border-gray-300 rounded-lg bg-white appearance-none p-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500 text-gray-700 relative text-sm font-medium transition-colors"
-        >
-            <option value="">All</option>
-            {options.map((option) => (
-                <option key={option} value={option}>
-                    {option}
-                </option>
-            ))}
-        </select>
-        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
-            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
-            </svg>
-        </div>
-    </div>
-);
-
-// --- MODAL COMPONENT ---
-interface ModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    children: React.ReactNode;
-    title: string;
-}
-
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, title }) => {
-    if (!isOpen) return null;
+    switch (priority) {
+        case "High":
+            colorClasses = "bg-red-500 text-white";
+            break;
+        case "Medium":
+            colorClasses = "bg-yellow-500 text-white";
+            break;
+        case "Low":
+            colorClasses = "bg-green-500 text-white";
+            break;
+    }
 
     return (
-        // Changed background to semi-transparent black (bg-black/50) and added backdrop-blur-md for the effect
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md p-4 transition-opacity">
-            <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full transform transition-all scale-100">
-                <div className="flex justify-between items-center p-5 border-b border-gray-200">
-                    <h3 className="text-xl font-bold text-gray-900">{title}</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-                        <X size={24} />
+        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${colorClasses}`}>
+            {priority}
+        </span>
+    );
+};
+
+// --- SUB-COMPONENT: NEW TICKET FORM ---
+
+interface NewTicketFormProps {
+    onBack: () => void;
+    onSubmit: (newTicket: Omit<SupportTicket, 'id' | 'status' | 'lastUpdated'>) => void;
+    courses: Course[];
+}
+
+const NewTicketForm: React.FC<NewTicketFormProps> = ({ onBack, onSubmit, courses }) => {
+    const [subject, setSubject] = useState('');
+    const [type, setType] = useState<TicketType | ''>('');
+    const [courseId, setCourseId] = useState<string>('');
+    const [description, setDescription] = useState('');
+    const alert = useAppAlert();
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!subject || !type || !description) {
+            alert('Please fill in all required fields (Subject, Type, and Description).', 'Missing Information');
+            return;
+        }
+
+        const selectedCourse = courses.find(c => c.id === courseId);
+
+        onSubmit({
+            subject,
+            type: type as TicketType,
+            courseId: selectedCourse?.id,
+            courseName: selectedCourse?.name,
+            description,
+            priority: 'Medium', // Default priority, can be calculated later
+        });
+        
+        // Reset form
+        setSubject('');
+        setType('');
+        setCourseId('');
+        setDescription('');
+        onBack();
+    };
+
+    const handleFileUpload = () => {
+         alert('File upload mocked. In a real app, this would open a file dialog and handle the upload process.', 'File Upload Mock');
+    }
+
+    return (
+        <div className="bg-white p-6 sm:p-8 rounded-xl shadow-lg border border-gray-200">
+            <header className="mb-6 flex items-center justify-between border-b pb-4">
+                <h2 className="text-2xl font-bold text-indigo-700 flex items-center">
+                    <PlusCircle size={24} className="mr-2" /> Submit a New Ticket
+                </h2>
+                <button
+                    onClick={onBack}
+                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                    Cancel
+                </button>
+            </header>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+                
+                {/* Subject */}
+                <div>
+                    <label htmlFor="subject" className="block text-sm font-medium text-gray-700 mb-1">Subject <span className="text-red-500">*</span></label>
+                    <input
+                        type="text"
+                        id="subject"
+                        value={subject}
+                        onChange={(e) => setSubject(e.target.value)}
+                        placeholder="e.g., Error on checkout, Quiz feedback, Video not loading"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
+                        required
+                    />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Select Type */}
+                    <div>
+                        <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">Ticket Type <span className="text-red-500">*</span></label>
+                        <select
+                            id="type"
+                            value={type}
+                            onChange={(e) => setType(e.target.value as TicketType)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 appearance-none transition duration-150 bg-white"
+                            required
+                        >
+                            <option value="">Select a type...</option>
+                            {(['Technical', 'Payment', 'Course Content', 'Account', 'Other'] as TicketType[]).map(t => (
+                                <option key={t} value={t}>{t}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Course Selector */}
+                    <div>
+                        <label htmlFor="course" className="block text-sm font-medium text-gray-700 mb-1">Associated Course (Optional)</label>
+                        <select
+                            id="course"
+                            value={courseId}
+                            onChange={(e) => setCourseId(e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 appearance-none transition duration-150 bg-white"
+                        >
+                            <option value="">Select a course...</option>
+                            {courses.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+
+                {/* Description */}
+                <div>
+                    <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">Detailed Description <span className="text-red-500">*</span></label>
+                    <textarea
+                        id="description"
+                        rows={4}
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="Please provide as much detail as possible about your issue or question."
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
+                        required
+                    ></textarea>
+                </div>
+
+                {/* File Upload Mock */}
+                <div className="flex justify-between items-center p-4 border border-dashed border-gray-300 rounded-lg bg-gray-50">
+                    <p className="text-sm text-gray-600">Attach Screenshot or File (Optional)</p>
+                    <button
+                        type="button"
+                        onClick={handleFileUpload}
+                        className="px-3 py-1 text-sm font-medium text-indigo-600 border border-indigo-400 rounded-lg bg-white hover:bg-indigo-50 transition-colors shadow-sm"
+                    >
+                        Browse Files
                     </button>
                 </div>
-                <div className="p-5">
-                    {children}
+
+                {/* Submit Button */}
+                <div className="pt-4">
+                    <button
+                        type="submit"
+                        className="w-full flex items-center justify-center px-4 py-3 border border-transparent text-base font-medium rounded-lg shadow-xl text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 transform hover:scale-[1.01]"
+                    >
+                        <Send size={20} className="mr-2" /> Submit Ticket
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+};
+
+
+// --- SUB-COMPONENT: TICKET LIST VIEW ---
+
+interface TicketListViewProps {
+    tickets: SupportTicket[];
+    onNewTicket: () => void;
+}
+
+const TicketListView: React.FC<TicketListViewProps> = ({ tickets, onNewTicket }) => {
+    const alert = useAppAlert();
+    
+    // Sort tickets: Open/In Progress first, then by last updated (newest first)
+    const sortedTickets = useMemo(() => {
+        const statusOrder: Record<TicketStatus, number> = { 'Open': 1, 'In Progress': 2, 'Resolved': 3, 'Closed': 4 };
+        return [...tickets].sort((a, b) => {
+            if (statusOrder[a.status] !== statusOrder[b.status]) {
+                return statusOrder[a.status] - statusOrder[b.status];
+            }
+            return new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime();
+        });
+    }, [tickets]);
+
+    const handleViewConversation = (id: string) => {
+        alert(`Opening conversation for Ticket ID: ${id}. (Mock Action)`, 'Ticket Conversation');
+    };
+
+    const timeSince = (dateString: string) => {
+        const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
+        let interval = seconds / 31536000;
+
+        if (interval > 1) return Math.floor(interval) + " years ago";
+        interval = seconds / 2592000;
+        if (interval > 1) return Math.floor(interval) + " months ago";
+        interval = seconds / 86400;
+        if (interval > 1) return Math.floor(interval) + " days ago";
+        interval = seconds / 3600;
+        if (interval > 1) return Math.floor(interval) + " hours ago";
+        interval = seconds / 60;
+        if (interval > 1) return Math.floor(interval) + " minutes ago";
+        return Math.floor(seconds) + " seconds ago";
+    };
+
+    return (
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
+            <div className="p-4 sm:p-6 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                <h2 className="text-xl font-semibold text-gray-800 flex items-center">
+                    <Ticket size={24} className="mr-2 text-indigo-500" /> Your Support Tickets ({tickets.length})
+                </h2>
+                <div className="flex space-x-3 mt-3 sm:mt-0">
+                    <button
+                         onClick={onNewTicket}
+                         className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg shadow-md hover:bg-indigo-700 transition-colors"
+                     >
+                         <PlusCircle size={18} className="mr-2" /> New Ticket
+                     </button>
+                    {/* Mock Filter */}
+                    <button
+                        className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-100 transition-colors"
+                        onClick={() => alert('Filtering options (by status, type, etc.) would appear here.', 'Filter Mock')}
+                    >
+                        <Filter size={18} className="mr-1" /> Filter
+                    </button>
                 </div>
             </div>
+
+            {tickets.length > 0 ? (
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
+                                    ID
+                                </th>
+                                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
+                                    Subject & Type
+                                </th>
+                                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Status
+                                </th>
+                                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Last Updated
+                                </th>
+                                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Action
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-100">
+                            {sortedTickets.map((ticket) => (
+                                <tr key={ticket.id} className="hover:bg-indigo-50/50 transition-colors">
+                                    {/* ID */}
+                                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500">
+                                        {ticket.id}
+                                    </td>
+                                    
+                                    {/* Subject & Type */}
+                                    <td className="px-4 sm:px-6 py-4 whitespace-normal text-sm font-medium text-gray-900">
+                                        <p className="font-semibold text-indigo-700">{ticket.subject}</p>
+                                        <div className="flex items-center space-x-2 mt-1">
+                                            <span className="text-xs text-gray-500 block">Type: {ticket.type}</span>
+                                            <PriorityChip priority={ticket.priority} />
+                                        </div>
+                                        {ticket.courseName && (
+                                            <span className="text-xs text-gray-400 block mt-0.5 italic">Course: {ticket.courseName}</span>
+                                        )}
+                                    </td>
+
+                                    {/* Status */}
+                                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
+                                        <StatusChip status={ticket.status} />
+                                    </td>
+                                    
+                                    {/* Last Updated */}
+                                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-700 flex items-center">
+                                        <Clock size={16} className="mr-1 text-gray-400" />
+                                        {timeSince(ticket.lastUpdated)}
+                                    </td>
+
+                                    {/* Action */}
+                                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <button
+                                            onClick={() => handleViewConversation(ticket.id)}
+                                            className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-indigo-600 border border-indigo-400 rounded-md bg-indigo-50 hover:bg-indigo-100 transition-colors shadow-sm"
+                                        >
+                                            <MessageSquare size={14} className="mr-1" />
+                                            View Conversation
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            ) : (
+                <div className="text-center p-12">
+                    <Ticket size={48} className="mx-auto text-gray-300" />
+                    <p className="mt-4 text-lg font-semibold text-gray-600">No support tickets found.</p>
+                    <p className="text-sm text-gray-500">Click "New Ticket" to raise an issue or question.</p>
+                </div>
+            )}
         </div>
     );
 };
 
 // --- MAIN COMPONENT ---
-export default function SupportTicketsPage() {
-    // Note: useNavigate is not available in this single-file environment, 
-    // so we mock the back functionality with a console log.
-    const mockNavigateBack = () => {
-        console.log("Mock Navigation: Attempted to go back.");
-    };
 
-    const [filterStatus, setFilterStatus] = useState("");
-    const [filterUrgency, setFilterUrgency] = useState("");
-    const [filterRole, setFilterRole] = useState("");
-    const [search, setSearch] = useState("");
+export default function StudentHelpdesk() {
+    const [tickets, setTickets] = useState<SupportTicket[]>(INITIAL_TICKETS);
+    const [view, setView] = useState<ViewState>('list');
+    const mockNavigateBack = () => console.log("Mock Navigation: Back to Dashboard");
     
-    // State for Modal Management
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [currentAction, setCurrentAction] = useState<{ type: 'Assign' | 'Respond' | 'Escalate', ticket: Ticket } | null>(null);
-    const [responseMessage, setResponseMessage] = useState('');
-    const [selectedAssignee, setSelectedAssignee] = useState(''); // New state for assignee selection
-
-    const filteredTickets = useMemo(() => {
-        return initialTickets.filter(
-            (t) =>
-                (!filterStatus || t.status === filterStatus) &&
-                (!filterUrgency || t.urgency === filterUrgency) &&
-                (!filterRole || t.role === filterRole) &&
-                (!search ||
-                    t.subject.toLowerCase().includes(search.toLowerCase()) ||
-                    t.raisedBy.toLowerCase().includes(search.toLowerCase()))
-        );
-    }, [filterStatus, filterUrgency, filterRole, search]);
-
-    // Opens the modal and sets the current action context
-    const handleActionClick = (type: 'Assign' | 'Respond' | 'Escalate', ticket: Ticket) => {
-        setCurrentAction({ type, ticket });
-        setIsModalOpen(true);
-        setResponseMessage(''); // Clear any previous response text
+    const handleTicketSubmit = (newTicketData: Omit<SupportTicket, 'id' | 'status' | 'lastUpdated'>) => {
+        const newTicket: SupportTicket = {
+            ...newTicketData,
+            id: `TKT-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+            status: 'Open',
+            lastUpdated: new Date().toISOString(),
+        };
         
-        // If assigning, initialize the selected assignee to the current one
-        if (type === 'Assign') {
-            setSelectedAssignee(ticket.assignedTo === 'Unassigned' ? '' : ticket.assignedTo);
-        } else {
-            setSelectedAssignee('');
-        }
-    };
-    
-    // Handles the primary action inside the modal
-    const handleConfirmAction = () => {
-        if (!currentAction) return;
-
-        console.group(`CONFIRMED ACTION: ${currentAction.type} for Ticket ${currentAction.ticket.id}`);
-        console.log("Ticket Subject:", currentAction.ticket.subject);
-        
-        switch (currentAction.type) {
-            case 'Assign':
-                // Here you would typically send an API call to assign the ticket.
-                console.log(`Action: Ticket reassigned.`);
-                console.log(`NEW ASSIGNEE: "${selectedAssignee}"`);
-                break;
-            case 'Respond':
-                // Here you would typically send an API call to submit the response.
-                console.log(`Response Text: "${responseMessage}"`);
-                console.log("Action: Response sent to user.");
-                break;
-            case 'Escalate':
-                // Here you would typically send an API call to change the ticket's priority/owner.
-                console.warn(`Action: Ticket escalated due to high urgency.`);
-                break;
-        }
-
-        console.groupEnd();
-        // Close modal after successful action
-        setIsModalOpen(false);
-        setCurrentAction(null);
-        setSelectedAssignee('');
-    };
-
-    // Renders the dynamic content based on the selected action
-    const renderModalContent = () => {
-        if (!currentAction) return null;
-        
-        const { type, ticket } = currentAction;
-        
-        if (type === 'Respond') {
-            return (
-                <div className="space-y-4">
-                    <p className="text-gray-700">Ticket ID: <span className="font-semibold">{ticket.id}</span></p>
-                    <p className="text-gray-700">Subject: <span className="font-semibold">{ticket.subject}</span></p>
-                    <textarea
-                        value={responseMessage}
-                        onChange={(e) => setResponseMessage(e.target.value)}
-                        placeholder="Type your response here..."
-                        rows={5}
-                        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-sky-500 focus:border-sky-500"
-                    />
-                    <div className="flex justify-end gap-3 pt-2">
-                        <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
-                            Cancel
-                        </button>
-                        <button 
-                            onClick={handleConfirmAction} 
-                            disabled={responseMessage.trim() === ''}
-                            className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors 
-                                ${responseMessage.trim() === '' ? 'bg-sky-300 cursor-not-allowed' : 'bg-sky-600 hover:bg-sky-700'}`}
-                        >
-                            Send Response
-                        </button>
-                    </div>
-                </div>
-            );
-        }
-        
-        if (type === 'Assign') {
-            const isUnassigned = selectedAssignee === '' || selectedAssignee === 'Unassigned';
-            
-            return (
-                <div className="space-y-4">
-                    <p className="text-gray-700">Ticket ID: <span className="font-semibold">{ticket.id}</span></p>
-                    <p className="text-gray-700 mb-4">Current Assignee: <span className="font-semibold">{ticket.assignedTo}</span></p>
-                    
-                    <div className="relative">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Select New Assignee</label>
-                        <select
-                            value={selectedAssignee}
-                            onChange={(e) => setSelectedAssignee(e.target.value)}
-                            className="w-full h-10 border border-gray-300 rounded-lg bg-white p-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500 text-gray-700 text-sm transition-colors appearance-none"
-                        >
-                            <option value="" disabled>-- Select a Team or User --</option>
-                            {assigneeOptions.map((option) => (
-                                <option key={option} value={option}>
-                                    {option}
-                                </option>
-                            ))}
-                        </select>
-                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500 top-7">
-                            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                                <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
-                            </svg>
-                        </div>
-                    </div>
-
-                    <div className="flex justify-end gap-3 pt-2">
-                        <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
-                            Cancel
-                        </button>
-                        <button 
-                            onClick={handleConfirmAction} 
-                            disabled={isUnassigned}
-                            className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors 
-                                ${isUnassigned ? 'bg-sky-300 cursor-not-allowed' : 'bg-sky-600 hover:bg-sky-700'}`}
-                        >
-                            Confirm Assignment
-                        </button>
-                    </div>
-                </div>
-            );
-        }
-
-        // Default confirmation for Escalate
-        let message = '';
-        let confirmText = '';
-        let confirmColor = 'bg-sky-600 hover:bg-sky-700';
-
-        if (type === 'Escalate') {
-            message = `WARNING: Are you sure you want to ESCALATE ticket ${ticket.id} due to its high importance/stale status? This action cannot be easily undone.`;
-            confirmText = 'Escalate Ticket';
-            confirmColor = 'bg-red-600 hover:bg-red-700';
-        }
-
-        return (
-            <div className="space-y-6">
-                <p className="text-gray-700">{message}</p>
-                <div className="flex justify-end gap-3 pt-2">
-                    <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
-                        Cancel
-                    </button>
-                    <button onClick={handleConfirmAction} className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${confirmColor}`}>
-                        {confirmText}
-                    </button>
-                </div>
-            </div>
-        );
+        // Add new ticket to the state and simulate data saving (e.g., to Firestore)
+        setTickets([newTicket, ...tickets]); 
+        useAppAlert()('Your new ticket has been successfully submitted! A support agent will respond shortly.', 'Ticket Submitted');
     };
 
     return (
-        <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
-            
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b pb-4">
-                <h1 className="text-3xl font-extrabold text-gray-900 flex items-center gap-2 mb-3 sm:mb-0">
-                    <MessageSquare size={28} className="text-sky-600" /> Support & Ticketing
-                </h1>
-                <button
-                    onClick={mockNavigateBack}
-                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-100 transition-colors"
-                >
-                    <ArrowLeft size={16} className="mr-2" /> Back to Dashboard
-                </button>
-            </div>
-
-            {/* Filters Card */}
-            <div className="bg-white p-4 sm:p-5 rounded-xl shadow-lg mb-6 border border-gray-100">
-                <h2 className="text-xl font-semibold text-gray-800 mb-4 pb-2 border-b">Filter Tickets</h2>
-                <div className="flex gap-4 flex-wrap items-center">
-                    
-                    {/* Search Field */}
-                    <div className="relative w-full max-w-xs min-w-[200px]">
-                        <label className="absolute -top-2 left-3 px-1 text-xs font-medium text-gray-500 bg-white z-10">Search</label>
-                        <input
-                            type="text"
-                            placeholder="Subject or User Name..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="w-full h-10 border border-gray-300 rounded-lg bg-white p-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500 text-gray-700 text-sm transition-colors"
-                        />
-                    </div>
-                    
-                    {/* Status Filter */}
-                    <CustomSelect
-                        label="Status"
-                        value={filterStatus}
-                        onChange={(e) => setFilterStatus(e.target.value)}
-                        options={["Open", "In Progress", "Resolved"]}
-                    />
-                    
-                    {/* Urgency Filter */}
-                    <CustomSelect
-                        label="Urgency"
-                        value={filterUrgency}
-                        onChange={(e) => setFilterUrgency(e.target.value)}
-                        options={["High", "Medium", "Low"]}
-                    />
-                    
-                    {/* User Role Filter */}
-                    <CustomSelect
-                        label="User Type"
-                        value={filterRole}
-                        onChange={(e) => setFilterRole(e.target.value)}
-                        options={["Student", "Instructor"]}
-                    />
-                </div>
-            </div>
-
-            {/* Tickets Table Card */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-100">
-                <div className="p-4 sm:p-5">
-                    <h2 className="text-xl font-semibold text-gray-800">🎫 All Support Tickets ({filteredTickets.length})</h2>
-                </div>
+        <div className="min-h-screen bg-gray-100 p-4 sm:p-8 font-sans">
+            <div>
                 
-                <hr className="border-gray-200" />
+                {/* Header */}
+                <header className="mb-8 border-b pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                    <h1 className="text-3xl font-extrabold text-indigo-700 flex items-center">
+                        <Ticket size={32} className="mr-3 text-indigo-500" /> Student Helpdesk
+                    </h1>
+                    <button
+                        onClick={mockNavigateBack}
+                        className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-100 transition-colors mt-3 sm:mt-0"
+                    >
+                        <ChevronDown size={16} className="mr-2 transform rotate-90" /> Back to Dashboard
+                    </button>
+                </header>
 
-                {/* Responsive Table Container */}
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticket ID</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">Subject</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raised By</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Urgency</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[250px]">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {filteredTickets.length > 0 ? (
-                                filteredTickets.map((t) => (
-                                    <tr key={t.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{t.id}</td>
-                                        <td className="px-4 py-4 text-sm text-gray-700 max-w-xs">{t.subject}</td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">{t.raisedBy}</td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm">
-                                            <TicketChip label={t.role} type="role" />
-                                        </td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{t.date}</td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm">
-                                            <TicketChip label={t.status} type="status" />
-                                        </td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm">
-                                            <TicketChip label={t.urgency} type="urgency" />
-                                        </td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">{t.assignedTo}</td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm">
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => handleActionClick('Assign', t)}
-                                                    className="px-3 py-1 text-xs font-medium text-sky-600 border border-sky-600 rounded-md hover:bg-sky-50 transition-colors"
-                                                >
-                                                    Assign
-                                                </button>
-                                                <button
-                                                    onClick={() => handleActionClick('Respond', t)}
-                                                    className="px-3 py-1 text-xs font-medium text-white bg-sky-600 rounded-md shadow-sm hover:bg-sky-700 transition-colors"
-                                                >
-                                                    Respond
-                                                </button>
-                                                <button
-                                                    onClick={() => handleActionClick('Escalate', t)}
-                                                    className="px-3 py-1 text-xs font-medium text-red-600 border border-red-600 rounded-md hover:bg-red-50 transition-colors"
-                                                >
-                                                    Escalate
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            ) : (
-                                <tr>
-                                    <td colSpan={9} className="px-6 py-10 text-center text-lg text-gray-500">
-                                        No tickets match the current filters.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                {/* Main View Switch */}
+                {view === 'list' ? (
+                    <TicketListView 
+                        tickets={tickets} 
+                        onNewTicket={() => setView('new')}
+                    />
+                ) : (
+                    <NewTicketForm
+                        onBack={() => setView('list')}
+                        onSubmit={handleTicketSubmit}
+                        courses={MOCK_COURSES}
+                    />
+                )}
             </div>
-            
-            {/* Action Modal */}
-            <Modal 
-                isOpen={isModalOpen} 
-                onClose={() => setIsModalOpen(false)}
-                title={currentAction ? `${currentAction.type} Ticket: ${currentAction.ticket.id}` : "Action"}
-            >
-                {renderModalContent()}
-            </Modal>
         </div>
     );
 }

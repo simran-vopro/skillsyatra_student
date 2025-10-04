@@ -22,7 +22,6 @@ import AchievementsPage from "./pages/manageAchievements/AchievementsPage";
 import PaymentsPage from "./pages/managePayments/payments";
 import SupportTicketsPage from "./pages/supportTickets/supportTicketsPage";
 import AnnouncementManagementPage from "./pages/AnnouncementManagement/announcements";
-import EarningsFinancePage from "./pages/managePayments/earnings";
 import ForumModerationPage from "./pages/forum/ForumModeration";
 import AdminCreate from "./pages/manageAdmins/adminCreate";
 import ReportsAnalytics from "./pages/ReportsAnalytics/reportsAnalytics";
@@ -32,6 +31,7 @@ import SystemSettingsPage from "./pages/settings/SystemSettings";
 import SuperAdminChatPortal from "./pages/chats/ChatPortal";
 import DemoCodeDashboard from "./pages/PromoCodesManagement/DemoCodeManager";
 import CourseDetailPage from "./pages/manageCourse/CourseDetailPage";
+import StudentKnowledgeBase from "./pages/managePayments/faq";
 
 
 export default function App() {
@@ -55,30 +55,30 @@ export default function App() {
           <Route path="/addInstructor" element={<InstructorCreate />} />
 
           <Route path="/tiers" element={<TierPathwayControl />} />
-          <Route path="/practicals" element={<PracticalCalendarManagement />} />
+          <Route path="/events" element={<PracticalCalendarManagement />} />
 
           <Route path="/students" element={<StudentsManagement />} />
           <Route path="/studentCreate" element={<StudentCreate />} />
           <Route path="/studentDetails" element={<StudentDetails />} />
 
           <Route path="/certificates" element={<AchievementsPage />} />
-          <Route path="/payments" element={<PaymentsPage />} />
+          <Route path="/payment-history" element={<PaymentsPage />} />
 
           <Route path="/tickets" element={<SupportTicketsPage />} />
 
           <Route path="/announcements" element={<AnnouncementManagementPage />} />
-          <Route path="/finance" element={<EarningsFinancePage />} />
+          <Route path="/faq" element={<StudentKnowledgeBase />} />
 
           <Route path="/studentSubmissions" element={<SubmissionPage />} />
 
           <Route path="/subAdmins" element={<AdminManagement />} />
           <Route path="/managePermissions" element={<SubAdminPermissions />} />
-          <Route path="/forums" element={<ForumModerationPage />} />
+          <Route path="/forum" element={<ForumModerationPage />} />
           <Route path="/addAdmin" element={<AdminCreate />} />
 
           <Route path="/reports" element={<ReportsAnalytics />} />
 
-          <Route path="/audit" element={<AuditLogsPage />} />
+          <Route path="/security" element={<AuditLogsPage />} />
 
           <Route path="/profile" element={<UserProfiles />} />
 

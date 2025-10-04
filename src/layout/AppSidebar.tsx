@@ -65,8 +65,7 @@ const AppSidebar: React.FC = () => {
             { icon: <LayoutDashboard />, name: "Dashboard", path: "/" },
             // 2. My Courses
             { icon: <BookOpen />, name: "My Courses", path: "/my-courses" },
-            // Events or Calendar View (All Activity)
-            { icon: <Calendar />, name: "Events Calendar", path: "/events" },
+
         ],
         [] // No adminUser dependency needed for a static student menu
     );
@@ -77,9 +76,9 @@ const AppSidebar: React.FC = () => {
             // 3. Forum Page
             { icon: <MessageSquare />, name: "Forum & Discussions", path: "/forum" },
             // 4. Ask Instructor
-            { icon: <MonitorPlay />, name: "Ask Instructor", path: "/ask-instructor" },
-            // 5. Practicals Booking Calendar
-            { icon: <CalendarCheck />, name: "Practicals Booking", path: "/practicals-booking" },
+            { icon: <MonitorPlay />, name: "Ask Instructor", path: "/chats" },
+            // Events or Calendar View (All Activity)
+            { icon: <Calendar />, name: "Events Calendar", path: "/events" },
         ],
         []
     );

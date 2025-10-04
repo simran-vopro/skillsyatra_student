@@ -1,761 +1,321 @@
-import React, { useMemo, useState } from "react";
-import { DollarSign, ArrowLeft, Check, X, Pause, Users, RefreshCw, Eye, Search, Filter } from "lucide-react";
+import React from "react";
+import {
+  Download,
+  CheckCircle,
+  XCircle,
+  RefreshCcw,
+  CreditCard,
+  Calendar,
+  TrendingUp,
+  HelpCircle,
+  ArrowLeft,
+  MoreVertical,
+} from "lucide-react";
 
-// --- TYPE DEFINITIONS ---
+// --- TYPE DEFINITIONS & MOCK DATA ---
 
-type PayoutStatus = "Pending" | "Approved" | "Rejected";
-type PaymentStatus = "Success" | "Refunded" | "Failed";
-
-interface Payout {
+// Represents a single course or tier purchase by the student.
+interface PaymentTransaction {
   id: string;
-  recipient: string; // RENAMED: from 'instructor' to 'recipient'
-  avatar: string;
-  amount: number; // Gross amount
-  fee: number; // Platform fee/tax deducted
-  date: string;
-  status: PayoutStatus;
-  method: string;
-  accountDetail: string; // Masked account identifier
-  source: string; // Why the payment is being made (e.g., Course Revenue Share, Affiliate Commission, Operational Expense)
-  rejectionReason?: string; // NEW: Reason if the payout was rejected
-}
-
-interface Payment {
-  id: string;
-  user: string;
-  course: string;
+  item: string; // Course/Tier name purchased
+  date: string; // ISO date of transaction
   amount: number;
-  date: string;
-  status: PaymentStatus;
+  currency: string;
+  method: string; // Payment method used
+  status: "Paid" | "Refunded" | "Failed";
+  invoiceId: string;
 }
 
-interface CourseRevenue {
-  course: string;
-  revenue: number;
+// Reusable component for displaying status chips with consistent Tailwind styling.
+interface StatusChipProps {
+  label: "Paid" | "Refunded" | "Failed";
 }
 
-interface ChipProps {
-  label: string;
-  type: 'payout' | 'payment';
-}
-
-interface StatCardProps {
-  title: string;
-  value: string;
-  icon: React.ComponentType<{ size: number, className?: string }>;
-  iconBgClass: string;
-  iconTextClass: string;
-  borderClass: string;
-  valueColorClass?: string;
-}
-
-interface PieChartEntry {
-  name: string;
-  value: number;
-  percentage: number;
-}
-
-
-// --- DUMMY DATA ---
-const payouts: Payout[] = [
-  // Instructor Payouts (Existing)
-  {
-    id: "PAYOUT-101",
-    recipient: "Jane Smith (Instructor)",
-    avatar: "https://placehold.co/100x100/10B981/ffffff?text=JS",
-    amount: 1200,
-    fee: 50,
-    date: "2025-03-10",
-    status: "Approved",
-    method: "Bank Transfer",
-    accountDetail: "Acct: ****1234",
-    source: "Advanced JavaScript Share Q1",
-  },
-  {
-    id: "PAYOUT-102",
-    recipient: "Alex Johnson (Instructor)",
-    avatar: "https://placehold.co/100x100/EF4444/ffffff?text=AJ",
-    amount: 900,
-    fee: 35,
-    date: "2025-03-09",
-    status: "Pending",
-    method: "PayPal",
-    accountDetail: "user.alex@mail.com",
-    source: "UI/UX Design Revenue - Mar",
-  },
-  {
-    id: "PAYOUT-103",
-    recipient: "Maria Rodriguez (Instructor)",
-    avatar: "https://placehold.co/100x100/3B82F6/ffffff?text=MR",
-    amount: 350,
-    fee: 15,
-    date: "2025-03-08",
-    status: "Pending",
-    method: "Wise",
-    accountDetail: "ID: W-56789",
-    source: "Cloud Fundamentals Commission",
-  },
-  // Marketing/Affiliate Payouts (Existing)
-  {
-    id: "PAYOUT-104",
-    recipient: "Digital Ads Inc. (Agency)",
-    avatar: "https://placehold.co/100x100/F97316/ffffff?text=AD",
-    amount: 5500,
-    fee: 0,
-    date: "2025-03-07",
-    status: "Approved",
-    method: "Wire Transfer",
-    accountDetail: "Inv: #2025-3-001",
-    source: "March Marketing Campaign Fee",
-  },
-  {
-    id: "PAYOUT-105",
-    recipient: "Global Affiliate Network",
-    avatar: "https://placehold.co/100x100/6D28D9/ffffff?text=GA",
-    amount: 800,
-    fee: 30,
-    date: "2025-03-06",
-    status: "Approved",
-    method: "PayPal",
-    accountDetail: "partner@global.net",
-    source: "Affiliate Commissions Feb",
-  },
-  // Operational Payouts (Existing) - CHANGED TO REJECTED
-  {
-    id: "PAYOUT-106",
-    recipient: "Office Rent Services",
-    avatar: "https://placehold.co/100x100/059669/ffffff?text=OP",
-    amount: 2500,
-    fee: 0,
-    date: "2025-03-05",
-    status: "Rejected", // CHANGED
-    method: "Bank Transfer",
-    accountDetail: "Ref: Mar Rent",
-    source: "Monthly Operational Expense",
-    rejectionReason: "Invoice details mismatch: Requires updated Q2 contract.", // ADDED REASON
-  },
-  // --- NEW PAYOUTS ADDED ---
-  {
-    id: "PAYOUT-107",
-    recipient: "Creative Supply Co.",
-    avatar: "https://placehold.co/100x100/374151/ffffff?text=SC",
-    amount: 450,
-    fee: 0,
-    date: "2025-03-12",
-    status: "Approved",
-    method: "Credit Card",
-    accountDetail: "CC: ****9987",
-    source: "Workshop Materials for Q2", // Practical materials/supplies
-  },
-  {
-    id: "PAYOUT-108",
-    recipient: "ServerCloud Solutions",
-    avatar: "https://placehold.co/100x100/60A5FA/ffffff?text=SS",
-    amount: 150,
-    fee: 0,
-    date: "2025-03-11",
-    status: "Pending",
-    method: "Direct Debit",
-    accountDetail: "Sub: SVS-2303",
-    source: "Monthly Software Subscription", // Subscription/Software
-  },
-  {
-    id: "PAYOUT-109",
-    recipient: "Platform Refund Processor",
-    avatar: "https://placehold.co/100x100/9CA3AF/ffffff?text=RP",
-    amount: 200,
-    fee: 5,
-    date: "2025-03-11",
-    status: "Approved",
-    method: "PayPal",
-    accountDetail: "Ref: REF-704",
-    source: "Customer Refund - Course X", // Refund
-  },
-  {
-    id: "PAYOUT-110",
-    recipient: "Jane Smith (Instructor)",
-    avatar: "https://placehold.co/100x100/10B981/ffffff?text=JS",
-    amount: 750,
-    fee: 25,
-    date: "2025-03-04",
-    status: "Pending",
-    method: "Bank Transfer",
-    accountDetail: "Acct: ****1234",
-    source: "React Advanced Share - Feb",
-  },
-  // NEW REJECTED ENTRY
-  {
-    id: "PAYOUT-111",
-    recipient: "Unauthorized Vendor",
-    avatar: "https://placehold.co/100x100/7C7E83/ffffff?text=UV",
-    amount: 1500,
-    fee: 0,
-    date: "2025-03-03",
-    status: "Rejected",
-    method: "Wire Transfer",
-    accountDetail: "Inv: #009-SEC",
-    source: "Suspect Equipment Purchase",
-    rejectionReason: "Failed internal security review (recipient not verified).", // ADDED REASON
-  },
-];
-
-const payments: Payment[] = [
-  {
-    id: "PAY-301",
-    user: "John Doe",
-    course: "React Basics",
-    amount: 200,
-    date: "2025-03-01",
-    status: "Success",
-  },
-  {
-    id: "PAY-302",
-    user: "Mary Johnson",
-    course: "UI/UX Design",
-    amount: 150,
-    date: "2025-02-28",
-    status: "Refunded",
-  },
-  {
-    id: "PAY-303",
-    user: "Sam Brown",
-    course: "Advanced JavaScript",
-    amount: 300,
-    date: "2025-02-27",
-    status: "Success",
-  },
-  {
-    id: "PAY-304",
-    user: "Liam Green",
-    course: "Data Science with Python",
-    amount: 450,
-    date: "2025-03-15",
-    status: "Success",
-  },
-  {
-    id: "PAY-305",
-    user: "Olivia White",
-    course: "Cloud Fundamentals",
-    amount: 120,
-    date: "2025-03-14",
-    status: "Success",
-  },
-  {
-    id: "PAY-306",
-    user: "Noah Black",
-    course: "Web Security",
-    amount: 250,
-    date: "2023-03-13",
-    status: "Failed",
-  },
-];
-
-const courseRevenue: CourseRevenue[] = [
-  { course: "React Basics", revenue: 5000 },
-  { course: "Advanced JavaScript", revenue: 7000 },
-  { course: "UI/UX Design", revenue: 3500 },
-  { course: "Data Science with Python", revenue: 9000 },
-  { course: "Cloud Fundamentals", revenue: 2000 },
-  { course: "Web Security", revenue: 4500 },
-];
-
-// Colors for Course Revenue Pie Chart
-const COURSE_COLORS = ['#0891B2', '#10B981', '#4F46E5', '#DC2626', '#F59E0B', '#6366F1', '#A855F7', '#EF4444', '#EC4899'];
-
-
-// --- Custom Components ---
-
-/**
- * Custom Tooltip for Recharts Pie Chart
- */
-const CustomTooltip: React.FC<any> = ({ active, payload }) => {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload as PieChartEntry;
-    return (
-      <div className="bg-white p-3 border border-gray-200 shadow-xl rounded-lg text-sm transition-opacity duration-300">
-        <p className="font-semibold text-gray-900">{data.name}</p>
-        <p className="text-gray-700">Revenue: <span className="font-bold text-teal-600">${data.value.toLocaleString()}</span></p>
-        <p className="text-gray-500">Share: {data.percentage.toFixed(1)}%</p>
-      </div>
-    );
-  }
-  return null;
-};
-
-/**
- * Reusable component for displaying status chips with consistent Tailwind styling.
- */
-const StatusChip: React.FC<ChipProps> = ({ label, type }) => {
+const StatusChip: React.FC<StatusChipProps> = ({ label }) => {
   let colorClasses = "bg-gray-100 text-gray-700 ring-gray-500/10";
 
-  if (type === 'payout') {
-    switch (label) {
-      case "Pending":
-        colorClasses = "bg-amber-100 text-amber-700 ring-amber-500/10";
-        break;
-      case "Approved":
-        colorClasses = "bg-green-100 text-green-700 ring-green-500/10";
-        break;
-      case "Rejected":
-        colorClasses = "bg-red-100 text-red-700 ring-red-500/10";
-        break;
-    }
-  } else if (type === 'payment') {
-    switch (label) {
-      case "Success":
-        colorClasses = "bg-green-100 text-green-700 ring-green-500/10";
-        break;
-      case "Refunded":
-        colorClasses = "bg-red-100 text-red-700 ring-red-500/10";
-        break;
-      case "Failed":
-        colorClasses = "bg-gray-100 text-gray-700 ring-gray-500/10";
-        break;
-    }
+  switch (label) {
+    case "Paid":
+      colorClasses = "bg-green-100 text-green-700 ring-green-500/10";
+      break;
+    case "Refunded":
+      colorClasses = "bg-blue-100 text-blue-700 ring-blue-500/10";
+      break;
+    case "Failed":
+      colorClasses = "bg-red-100 text-red-700 ring-red-500/10";
+      break;
   }
 
+  let Icon = CheckCircle;
+  if (label === "Refunded") Icon = RefreshCcw;
+  if (label === "Failed") Icon = XCircle;
+
   return (
-    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset ${colorClasses}`}>
-      {label}
+    <span
+      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset ${colorClasses}`}
+    >
+      <Icon size={14} className="mr-1" /> {label}
     </span>
   );
 };
 
-/**
- * Helper component for the snapshot cards
- */
-const StatCard: React.FC<StatCardProps> = ({
-  title,
-  value,
-  icon: Icon,
-  iconBgClass,
-  iconTextClass,
-  borderClass,
-  valueColorClass = "text-gray-800"
-}) => {
-  const handleViewMore = (cardTitle: string) => {
-    console.log(`View More clicked for: ${cardTitle}`);
-  };
+const MOCK_TRANSACTIONS: PaymentTransaction[] = [
+  {
+    id: "ORD-87654",
+    item: "Cloud Infrastructure Tier - Annual Subscription",
+    date: "2025-08-15T10:30:00Z",
+    amount: 299.99,
+    currency: "USD",
+    method: "Visa **** 4567",
+    status: "Paid",
+    invoiceId: "INV-001A",
+  },
+  {
+    id: "ORD-87653",
+    item: "Advanced React Course Bundle (Refunded)",
+    date: "2025-07-01T14:45:00Z",
+    amount: 99.0,
+    currency: "USD",
+    method: "MasterCard **** 1234",
+    status: "Refunded",
+    invoiceId: "INV-002B",
+  },
+  {
+    id: "ORD-87652",
+    item: "Python for Data Science Module",
+    date: "2025-06-20T09:00:00Z",
+    amount: 49.5,
+    currency: "USD",
+    method: "PayPal",
+    status: "Paid",
+    invoiceId: "INV-003C",
+  },
+  {
+    id: "ORD-87651",
+    item: "React Essentials Workshop Pass (Failed Payment)",
+    date: "2025-05-05T17:10:00Z",
+    amount: 19.99,
+    currency: "USD",
+    method: "Amex **** 9999",
+    status: "Failed",
+    invoiceId: "INV-004D",
+  },
+  {
+    id: "ORD-87650",
+    item: "Full Stack Development Bootcamp",
+    date: "2025-04-22T12:00:00Z",
+    amount: 499.0,
+    currency: "USD",
+    method: "Wire Transfer",
+    status: "Paid",
+    invoiceId: "INV-005E",
+  },
+];
 
-  return (
-    <div className={`bg-white rounded-xl ${borderClass} shadow-lg p-4 flex flex-col transition-shadow hover:shadow-xl`}>
-      <div className="flex justify-between items-center mb-3">
-        {/* Icon */}
-        <div className={`p-2 rounded-lg ${iconBgClass} ${iconTextClass}`}>
-          <Icon size={20} />
-        </div>
-        {/* Outline View Button */}
-        <button
-          onClick={() => handleViewMore(title)}
-          className={`text-xs ${iconTextClass} hover:opacity-80 flex items-center transition-colors px-2 py-1 border border-gray-200 rounded-full font-medium`}
-        >
-          <Eye size={12} className="mr-1" />
-          View
-        </button>
-      </div>
-      <p className="text-sm font-medium text-gray-500">{title}</p>
-      <p className={`text-3xl font-bold ${valueColorClass} mt-1`}>{value}</p>
-    </div>
-  );
+// --- UTILITY FUNCTIONS ---
+
+const formatCurrency = (amount: number, currency: string) => {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency,
+  }).format(amount);
 };
 
-// --- MAIN COMPONENT ---
+// Custom alert/message box implementation instead of window.alert()
+const useAppAlert = () => {
+  return (message: string, title: string = "Information") => {
+    const modal = document.createElement("div");
+    modal.className =
+      "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4";
+    modal.innerHTML = `
+          <div class="bg-white p-6 rounded-xl shadow-2xl transform transition-all duration-300 scale-100">
+            <h3 class="text-xl font-bold mb-3 text-indigo-700">${title}</h3>
+            <p class="text-gray-700 text-sm">${message}</p>
+            <button id="closeAlert" class="mt-5 w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-md">
+              Close
+            </button>
+          </div>
+        `;
+    document.body.appendChild(modal);
+    document
+      .getElementById("closeAlert")
+      ?.addEventListener("click", () => document.body.removeChild(modal));
+  };
+};
 
-export default function PaymentBillsPage() {
-  // State for course revenue filtering and sorting
-  const [courseSearchTerm, setCourseSearchTerm] = useState<string>('');
-  const [courseSortOrder, setCourseSortOrder] = useState<'high' | 'low' | 'none'>('high');
+/**
+ * Main Student Order History Component
+ */
+export default function StudentOrderHistory() {
+  const transactions = MOCK_TRANSACTIONS;
+  const alert = useAppAlert();
 
-  // State for all payouts filtering
-  const [payoutSearchTerm, setPayoutSearchTerm] = useState<string>('');
-  const [payoutStatusFilter, setPayoutStatusFilter] = useState<'All' | PayoutStatus>('Pending'); // Default to Pending
-
-  // State for student payments filtering
-  const [paymentSearchTerm, setPaymentSearchTerm] = useState<string>('');
-  const [paymentStatusFilter, setPaymentStatusFilter] = useState<'All' | PaymentStatus>('All');
-
-
-  // Mock the navigation function for single-file environment
   const mockNavigateBack = () => {
     console.log("Mock Navigation: Attempted to go back.");
   };
 
-  // --- UPDATED Summary Calculations ---
-  const { netPlatformRevenue, totalRefunds, pendingPayouts, totalPayoutsProcessed } = useMemo(() => {
-    // 1. Total Successful Payments (Gross Revenue)
-    const totalSuccessfulPayments = payments.filter((p) => p.status === "Success").reduce((sum, p) => sum + p.amount, 0);
+  const handleSupportClick = () => {
+    alert(
+      "For immediate assistance with any payment, invoice, or refund issue, please contact our dedicated financial support team via email at support@learnflow.com or reference your Order ID when opening a support ticket.",
+      "Payment Support & Help"
+    );
+  };
 
-    // 2. Total Refunds (Deduction)
-    const totalRefunds = payments
-      .filter((p) => p.status === "Refunded")
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    // 3. Total Payout Fees (Deduction - the platform's share/fee)
-    const totalPayoutFees = payouts.reduce((sum, p) => sum + p.fee, 0);
-
-    // Net Platform Revenue = Successful Payments - Refunds - Payout Fees
-    const netPlatformRevenue = totalSuccessfulPayments - totalRefunds - totalPayoutFees;
-
-    // 4. Pending Payout Count
-    const pendingPayouts = payouts.filter((p) => p.status === "Pending").length;
-
-    // 5. Total Payouts Processed (Approved + Rejected)
-    const totalPayoutsProcessed = payouts.filter(p => p.status !== "Pending").length;
-
-    return { netPlatformRevenue, totalRefunds, pendingPayouts, totalPayoutsProcessed };
-  }, []);
-
-
-  // 1. Filtering and Sorting logic for Course Revenue
-  const filteredRevenue: CourseRevenue[] = useMemo(() => {
-    let filtered = courseRevenue;
-
-    // 1. Filtering (Search)
-    if (courseSearchTerm) {
-      filtered = filtered.filter(c =>
-        c.course.toLowerCase().includes(courseSearchTerm.toLowerCase())
+  const handleDownloadInvoice = (txn: PaymentTransaction) => {
+    const isDownloadable = txn.status === "Paid" || txn.status === "Refunded";
+    if (isDownloadable) {
+      alert(
+        `Invoice ${txn.invoiceId} for ${txn.item} is now downloading. (Mock Action)`,
+        "Invoice Download Initiated"
+      );
+    } else {
+      alert(
+        `Invoice is not available for transactions with status: ${txn.status}.`,
+        "Action Not Available"
       );
     }
-
-    // 2. Sorting
-    if (courseSortOrder === 'high') {
-      filtered = [...filtered].sort((a, b) => b.revenue - a.revenue);
-    } else if (courseSortOrder === 'low') {
-      filtered = [...filtered].sort((a, b) => a.revenue - b.revenue);
-    }
-
-    return filtered;
-  }, [courseSearchTerm, courseSortOrder]);
-
-  // Format data for PieChart
-  const pieChartData: PieChartEntry[] = useMemo(() => {
-    const totalRevenue = filteredRevenue.reduce((sum, item) => sum + item.revenue, 0);
-
-    return filteredRevenue.map(item => ({
-      name: item.course,
-      value: item.revenue,
-      percentage: totalRevenue > 0 ? ((item.revenue / totalRevenue) * 100) : 0
-    }));
-  }, [filteredRevenue]);
-
-
-  // 2. Filtering logic for All Payouts
-  const filteredPayouts: Payout[] = useMemo(() => {
-    return payouts.filter(payout => {
-      // 1. Status Filter
-      const statusMatch = payoutStatusFilter === 'All' || payout.status === payoutStatusFilter;
-
-      // 2. Search Term Filter (by recipient, source, or method)
-      const searchMatch = payoutSearchTerm === '' ||
-        payout.recipient.toLowerCase().includes(payoutSearchTerm.toLowerCase()) ||
-        payout.source.toLowerCase().includes(payoutSearchTerm.toLowerCase()) ||
-        payout.method.toLowerCase().includes(payoutSearchTerm.toLowerCase());
-
-      return statusMatch && searchMatch;
-    });
-  }, [payoutSearchTerm, payoutStatusFilter]);
-
-
-  // 3. Filtering logic for Student Payments
-  const filteredPayments: Payment[] = useMemo(() => {
-    return payments.filter(payment => {
-      // 1. Status Filter
-      const statusMatch = paymentStatusFilter === 'All' || payment.status === paymentStatusFilter;
-
-      // 2. Search Term Filter (by user or course)
-      const searchMatch = paymentSearchTerm === '' ||
-        payment.user.toLowerCase().includes(paymentSearchTerm.toLowerCase()) ||
-        payment.course.toLowerCase().includes(paymentSearchTerm.toLowerCase());
-
-      return statusMatch && searchMatch;
-    });
-  }, [paymentSearchTerm, paymentStatusFilter]);
-
-  // Action handlers (mocked)
-  const handleApprove = (id: string) => console.log(`Action: Approved payout ${id}`);
-  const handleHold = (id: string) => console.log(`Action: Held payout ${id}`);
-  const handleReject = (id: string) => console.log(`Action: Rejected payout ${id}`);
-
-  // Status filter options
-  const payoutStatusOptions: PayoutStatus[] = ["Pending", "Approved", "Rejected"];
-  const paymentStatusOptions: PaymentStatus[] = ["Success", "Refunded", "Failed"];
+  };
 
   return (
-    <div className="p-4 sm:p-6 bg-gray-50 min-h-screen font-sans">
+    <div className="min-h-screen bg-gray-100 p-4 sm:p-8 font-sans">
+      <div >
+        {/* Header */}
+        <header className="mb-8 border-b pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center">
+          <h1 className="text-3xl font-extrabold text-indigo-700 flex items-center">
+            <CreditCard size={32} className="mr-3 text-indigo-500" /> Order &
+            Payment History
+          </h1>
+          <button
+            onClick={mockNavigateBack}
+            className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-100 transition-colors mt-3 sm:mt-0"
+          >
+            <ArrowLeft size={16} className="mr-2" /> Back to Dashboard
+          </button>
+        </header>
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b pb-4">
-        <h1 className="text-3xl font-extrabold text-gray-900 flex items-center gap-2 mb-3 sm:mb-0">
-          <DollarSign size={28} className="text-sky-600" /> Payments & Bills
-        </h1>
-        <button
-          onClick={mockNavigateBack}
-          className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-100 transition-colors"
-        >
-          <ArrowLeft size={16} className="mr-2" /> Back to Dashboard
-        </button>
-      </div>
-
-      {/* Finance Snapshot - KPI Cards (UPDATED) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {/* KPI 1: Net Platform Revenue (New Title/Value) */}
-        <StatCard
-          title="Net Platform Revenue"
-          value={`$${netPlatformRevenue.toLocaleString()}`}
-          icon={DollarSign}
-          iconBgClass="bg-green-100"
-          iconTextClass="text-green-600"
-          borderClass="border border-green-200"
-        />
-        {/* KPI 2: Pending Payouts (Unchanged) */}
-        <StatCard
-          title="Pending Payouts"
-          value={pendingPayouts.toString()}
-          icon={Pause}
-          iconBgClass="bg-amber-100"
-          iconTextClass="text-amber-600"
-          borderClass="border border-amber-200"
-          valueColorClass="text-amber-600"
-        />
-        {/* KPI 3: Total Refunds (Unchanged) */}
-        <StatCard
-          title="Total Refunds"
-          value={`$${totalRefunds.toLocaleString()}`}
-          icon={X}
-          iconBgClass="bg-red-100"
-          iconTextClass="text-red-600"
-          borderClass="border border-red-200"
-          valueColorClass="text-red-600"
-        />
-        {/* KPI 4: Total Payouts Processed (New Title/Value/Icon) */}
-        <StatCard
-          title="Total Payouts Processed"
-          value={totalPayoutsProcessed.toString()}
-          icon={Check} // Switched icon to Check
-          iconBgClass="bg-indigo-100"
-          iconTextClass="text-indigo-600"
-          borderClass="border border-indigo-200"
-        />
-      </div>
-
-      {/* ALL Payout Transactions - THE DETAILED LEDGER */}
-      <div className="bg-white rounded-xl shadow-lg border border-gray-100 mb-8">
-        <div className="p-5 border-b border-gray-200">
-          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <DollarSign size={20} className="text-sky-600" /> All Payout Transactions
-          </h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Review and manage all payouts (Instructors, Affiliates, Vendors, Expenses, etc.), showing amount, source, and destination details.
-          </p>
-        </div>
-
-        {/* Payout Controls */}
-        <div className="p-4 flex flex-col sm:flex-row gap-4 border-b border-gray-100">
-          {/* Search */}
-          <div className="relative w-full sm:w-1/2">
-            <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              // UPDATED SEARCH PLACEHOLDER
-              placeholder="Search recipient, source, or method..."
-              value={payoutSearchTerm}
-              onChange={(e) => setPayoutSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-sky-500 focus:border-sky-500 transition-colors text-sm"
+        {/* Support Banner (Required Feature: Support link for payment issues) */}
+        <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-xl mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center shadow-md">
+          <div className="flex items-start">
+            <HelpCircle
+              size={24}
+              className="text-yellow-600 mr-3 mt-0.5 flex-shrink-0"
             />
+            <p className="text-sm text-yellow-800 font-medium">
+              Experiencing a payment issue or need a refund processed? Get help
+              here.
+            </p>
           </div>
-
-          {/* Status Filter */}
-          <div className="relative w-full sm:w-auto flex-shrink-0">
-            <Filter size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            <select
-              value={payoutStatusFilter}
-              onChange={(e) => setPayoutStatusFilter(e.target.value as 'All' | PayoutStatus)}
-              className="w-full pl-10 pr-8 py-2 border border-gray-300 rounded-lg bg-white focus:ring-sky-500 focus:border-sky-500 appearance-none text-sm font-medium"
-            >
-              <option value="All">All Statuses</option>
-              {payoutStatusOptions.map(status => (
-                <option key={status} value={status}>{status}</option>
-              ))}
-            </select>
-          </div>
+          <button
+            onClick={handleSupportClick}
+            className="flex items-center text-sm font-semibold text-yellow-800 bg-yellow-200 px-3 py-1.5 rounded-lg hover:bg-yellow-300 transition-colors mt-3 sm:mt-0 flex-shrink-0"
+          >
+            Contact Support <HelpCircle size={16} className="ml-2" />
+          </button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                {/* COLUMN HEADER RENAMED TO RECIPIENT */}
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Recipient</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue Source / Expense</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gross Amt.</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fee</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Net Payout</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Method</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account Detail</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[300px]">Required Actions / Status Details</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-100">
-              {filteredPayouts.length > 0 ? filteredPayouts.map((p) => (
-                <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    <div className="flex items-center gap-3">
-                      <img
-                        className="h-8 w-8 rounded-full object-cover"
-                        src={p.avatar}
-                        alt={p.recipient}
-                        onError={(e) => {
-                          const target = e.currentTarget as HTMLImageElement;
-                          target.src = 'https://placehold.co/100x100/A0A0A0/ffffff?text=User';
-                          target.onerror = null;
-                        }}
-                      />
-                      {/* RENDERED RECIPIENT NAME */}
-                      {p.recipient}
-                    </div>
-                  </td>
-                  {/* Revenue Source / Period (New Column) */}
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-sky-700 font-semibold">{p.source}</td>
-                  {/* Gross Amount */}
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">${p.amount.toLocaleString()}</td>
-                  {/* Fee */}
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-red-600">-${p.fee.toLocaleString()}</td>
-                  {/* Net Payout (Calculated) */}
-                  <td className="px-4 py-4 whitespace-nowrap text-sm font-bold text-green-700">${(p.amount - p.fee).toLocaleString()}</td>
-                  {/* Payment Method */}
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700 font-semibold">{p.method}</td>
-                  {/* Account Detail */}
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{p.accountDetail}</td>
-                  {/* Status */}
-                  <td className="px-4 py-4 whitespace-nowrap text-sm">
-                    <StatusChip label={p.status} type="payout" />
-                  </td>
-                  {/* Required Actions / Status Details */}
-                  <td className="px-4 py-4 whitespace-nowrap text-sm">
-                    {p.status === "Pending" && (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleApprove(p.id)}
-                          className="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded-lg shadow-sm hover:bg-green-700 transition-colors flex items-center gap-1"
-                        >
-                          <Check size={14} /> Approve & Send
-                        </button>
-                        <button
-                          onClick={() => handleHold(p.id)}
-                          className="px-3 py-1 text-xs font-medium text-amber-700 border border-amber-600 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors flex items-center gap-1"
-                        >
-                          <Pause size={14} /> Hold Payment
-                        </button>
-                        <button
-                          onClick={() => handleReject(p.id)}
-                          className="px-3 py-1 text-xs font-medium text-white bg-red-600 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center gap-1"
-                        >
-                          <X size={14} /> Reject
-                        </button>
-                      </div>
-                    )}
-                    {p.status === "Approved" && (
-                      <span className="text-gray-500 italic">Payment processed on {p.date}</span>
-                    )}
-                    {p.status === "Rejected" && (
-                      <div className="flex flex-col text-red-700">
-                        <span className="font-semibold mb-1 flex items-center gap-1">
-                          <X size={14} className="flex-shrink-0" /> Rejection Reason:
-                        </span>
-                        <span className="text-xs text-gray-700 font-normal italic whitespace-normal max-w-[280px]">
-                          {p.rejectionReason || "Reason not provided."}
-                        </span>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              )) : (
-                <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-gray-500 text-sm">
-                    No payout requests found matching your filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Payment History & Revenue Breakdown */}
-      <div className="">
-
-        {/* Payment History */}
-        <div className="bg-white rounded-xl shadow-lg border border-gray-100">
-          <div className="p-5 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
-              <RefreshCw size={20} className="text-purple-600" /> Student Payment History
+        {/* Transaction Table */}
+        <main className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
+          <div className="p-4 sm:p-6 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-800">
+              Your Recent Transactions
             </h2>
           </div>
 
-          {/* Payment Controls */}
-          <div className="p-4 flex flex-col sm:flex-row gap-4 border-b border-gray-100">
-            {/* Search */}
-            <div className="relative w-full sm:w-1/2">
-              <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search user or course..."
-                value={paymentSearchTerm}
-                onChange={(e) => setPaymentSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 transition-colors text-sm"
-              />
-            </div>
-
-            {/* Status Filter */}
-            <div className="relative w-full sm:w-auto flex-shrink-0">
-              <Filter size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <select
-                value={paymentStatusFilter}
-                onChange={(e) => setPaymentStatusFilter(e.target.value as 'All' | PaymentStatus)}
-                className="w-full pl-10 pr-8 py-2 border border-gray-300 rounded-lg bg-white focus:ring-purple-500 focus:border-purple-500 appearance-none text-sm font-medium"
-              >
-                <option value="All">Filter by Status (All)</option>
-                {paymentStatusOptions.map(status => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Course</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
-                {filteredPayments.length > 0 ? filteredPayments.map((pay) => (
-                  <tr key={pay.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">{pay.user}</td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{pay.course}</td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm font-bold text-gray-800">${pay.amount.toLocaleString()}</td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm">
-                      <StatusChip label={pay.status} type="payment" />
-                    </td>
-                  </tr>
-                )) : (
+          {transactions.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
                   <tr>
-                    <td colSpan={4} className="px-4 py-10 text-center text-gray-500 text-sm">
-                      No payment records found matching your filters.
-                    </td>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[250px]">
+                      Purchased Item
+                    </th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Amount
+                    </th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Method
+                    </th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {transactions.map((txn) => (
+                    <tr
+                      key={txn.id}
+                      className="hover:bg-indigo-50/50 transition-colors"
+                    >
+                      {/* Item */}
+                      <td className="px-4 sm:px-6 py-4 whitespace-normal text-sm font-medium text-indigo-700">
+                        <p className="font-semibold">{txn.item}</p>
+                        <span className="text-xs text-gray-500 block">
+                          Order: {txn.id}
+                        </span>
+                      </td>
 
+                      {/* Amount */}
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-bold text-green-700">
+                        {formatCurrency(txn.amount, txn.currency)}
+                      </td>
 
+                      {/* Date */}
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {new Date(txn.date).toLocaleDateString()}
+                        <span className="text-xs text-gray-400 block">
+                          {new Date(txn.date).toLocaleTimeString()}
+                        </span>
+                      </td>
+
+                      {/* Method */}
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {txn.method}
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
+                        <StatusChip label={txn.status} />
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button
+                          onClick={() => handleDownloadInvoice(txn)}
+                          disabled={txn.status === "Failed"}
+                          className="inline-flex items-center px-3 py-1 text-xs font-medium text-indigo-600 border border-indigo-400 rounded-md bg-indigo-50 hover:bg-indigo-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-500"
+                          title={
+                            txn.status === "Failed"
+                              ? "Invoice not available"
+                              : "Download Invoice"
+                          }
+                        >
+                          <Download size={14} className="mr-1" />
+                          Invoice ({txn.invoiceId})
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center p-12">
+              <CreditCard size={48} className="mx-auto text-gray-300" />
+              <p className="mt-4 text-lg font-semibold text-gray-600">
+                You haven't purchased any courses yet!
+              </p>
+              <p className="text-sm text-gray-500">
+                All your purchases will appear here after checkout.
+              </p>
+            </div>
+          )}
+        </main>
       </div>
     </div>
   );
