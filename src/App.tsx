@@ -32,7 +32,9 @@ import SuperAdminChatPortal from "./pages/chats/ChatPortal";
 import DemoCodeDashboard from "./pages/PromoCodesManagement/DemoCodeManager";
 import CourseDetailPage from "./pages/manageCourse/CourseDetailPage";
 import StudentKnowledgeBase from "./pages/managePayments/faq";
-
+import ReferralInvitePage from "./pages/activities/ReferralInvitePage";
+import SkillAssessmentPage from "./pages/manageCourse/SkillAssessmentPage";
+import MySubmissionsPage from "./pages/manageCourse/SkillAssessmentPage";
 
 export default function App() {
   return (
@@ -66,14 +68,20 @@ export default function App() {
 
           <Route path="/tickets" element={<SupportTicketsPage />} />
 
-          <Route path="/announcements" element={<AnnouncementManagementPage />} />
+          <Route
+            path="/announcements"
+            element={<AnnouncementManagementPage />}
+          />
           <Route path="/faq" element={<StudentKnowledgeBase />} />
 
           <Route path="/studentSubmissions" element={<SubmissionPage />} />
 
           <Route path="/subAdmins" element={<AdminManagement />} />
+
           <Route path="/managePermissions" element={<SubAdminPermissions />} />
+
           <Route path="/forum" element={<ForumModerationPage />} />
+
           <Route path="/addAdmin" element={<AdminCreate />} />
 
           <Route path="/reports" element={<ReportsAnalytics />} />
@@ -87,10 +95,10 @@ export default function App() {
           <Route path="/chats" element={<SuperAdminChatPortal />} />
 
           <Route path="/promoCodes" element={<DemoCodeDashboard />} />
-
+          <Route path="/referral" element={<ReferralInvitePage />} />
+          <Route path="/assessments" element={<SkillAssessmentPage />} />
+          <Route path="/submissions" element={<MySubmissionsPage />} />
         </Route>
-
-
 
         {/* 404 Page */}
         <Route path="*" element={<NotFound />} />
