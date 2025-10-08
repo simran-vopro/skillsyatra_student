@@ -53,6 +53,34 @@ const STATIC_COURSES: StudentCourse[] = [
 
 ];
 
+// --- STATIC RECOMMENDED COURSE DATA ---
+const RECOMMENDED_COURSES: StudentCourse[] = [
+  {
+    _id: "r-001",
+    title: "Advanced Graphic Design Techniques (Tier 2)",
+    thumbnail: "https://cdn1.careeraddict.com/uploads/article/60468/computer-science-course.jpg",
+    progress: 0,
+    isCompleted: false,
+    tier: "Tier 2",
+  },
+  {
+    _id: "r-002",
+    title: "Data Science with Python & R",
+    thumbnail: "https://cdn1.careeraddict.com/uploads/article/60468/computer-science-course.jpg",
+    progress: 0,
+    isCompleted: false,
+    tier: "Tier 3",
+  },
+  {
+    _id: "r-003",
+    title: "Creative Writing & Storytelling Masterclass",
+    thumbnail: "https://cdn1.careeraddict.com/uploads/article/60468/computer-science-course.jpg",
+    progress: 0,
+    isCompleted: false,
+    tier: "Tier 1",
+  },
+];
+
 // Custom hook that now just returns the static data
 const useStudentCourseList = () => {
   // Simulate a small loading delay for a better user experience on refresh/first load
@@ -143,7 +171,6 @@ export default function StudentCourseDashboard() {
         </Tabs>
       </Box>
 
-      {/* Course Grid */}
       {loading ? (
         <Box className="text-center py-10 text-xl text-blue-500 font-semibold">
           Loading your courses... ⏳
@@ -153,15 +180,28 @@ export default function StudentCourseDashboard() {
           No courses found for the current selection. Adjust your filters or search. 📚
         </Box>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredCourses.map((course) => (
-            <CourseCard
-              key={course._id}
-              course={course as any} // Cast to 'any' here since the CourseCard expects a StudentCourse
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredCourses.map((course) => (
+              <CourseCard key={course._id} course={course as any} mode="owned" />
+            ))}
+          </div>
+
+          {/* --- Recommendations Section --- */}
+          <div className="mt-12">
+            <h3 className="text-2xl font-semibold mb-6 text-gray-900 dark:text-white">
+              Recommended for You
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {RECOMMENDED_COURSES.map((course) => (
+                <CourseCard key={course._id} course={course as any} mode="recommended" />
+              ))}
+            </div>
+          </div>
+        </>
       )}
+
+
     </div>
   );
 }

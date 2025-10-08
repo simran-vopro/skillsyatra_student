@@ -2,6 +2,7 @@
 
 import { Course } from "../../../types/course";
 import { useNavigate } from "react-router";
+
 // Import LinearProgress here
 import { Box, Typography, LinearProgress } from "@mui/material";
 import { ArrowRight, Download, Package, Award, FileText } from "lucide-react";
@@ -21,6 +22,7 @@ interface StudentCourse extends Course {
 
 interface CourseCardProps {
     course: StudentCourse;
+    mode?: "owned" | "recommended"; // NEW
 }
 // ---------------------------------------------------
 
@@ -37,92 +39,99 @@ const getTierStyles = (tier: string) => {
             return { accentColor: "text-gray-600 dark:text-gray-400", bgColor: "bg-gray-100 dark:bg-gray-700", progressColor: "#6b7280" };
     }
 };
+
 // -------------------------------------------------------------------------
 
-export default function CourseCard({ course }: CourseCardProps) {
+export default function CourseCard({ course, mode = "owned" }: CourseCardProps) {
     const navigate = useNavigate();
     const progressPercent = Math.min(100, Math.max(0, course.progress));
-    const { accentColor, bgColor, progressColor } = getTierStyles(course.tier); // Destructure progressColor
-
-    // Define the primary progress color for the bar
-    const primaryProgressColor = course.isCompleted ? '#10b981' : progressColor;
+    const { accentColor, bgColor, progressColor } = getTierStyles(course.tier);
+    const primaryProgressColor = course.isCompleted ? "#10b981" : progressColor;
 
     const handleActionClick = () => {
-        navigate(`/course/${course._id}/learn`);
+        if (mode === "owned") {
+            navigate(`/course/${course._id}/learn`);
+        } else {
+            console.log(`Purchasing course: ${course.title}`);
+        }
     };
 
     const handleCertificateDownload = () => {
         console.log(`Downloading certificate for: ${course.title}`);
     };
 
-    // --- Card-specific logic ---
     const isStarted = progressPercent > 0 && progressPercent < 100;
-    const actionText = course.isCompleted ? "Download" : isStarted ? `${progressPercent}% Continue` : `${progressPercent}% Start`;
+    const actionText =
+        course.isCompleted
+            ? "Download"
+            : isStarted
+                ? "Continue"
+                : "Start";
     const ActionIcon = course.isCompleted ? Download : ArrowRight;
 
-    // UPDATED: CourseVisual now uses the thumbnail image
+    // CourseVisual stays the same
     const CourseVisual = () => (
         <div
             className={`w-14 h-14 flex-shrink-0 mr-4 rounded-lg overflow-hidden flex items-center justify-center 
-                        ${bgColor} border border-transparent`} // Added a subtle background/border for consistency
+                        ${bgColor} border border-transparent`}
         >
             <img
-                src={(course.thumbnail as string) || "/placeholder-course-thumb.svg"} // Fallback image if thumbnail is missing
+                src={course.thumbnail || "/placeholder-course-thumb.svg"}
                 alt={course.title}
-                className="w-full h-full object-cover" // Ensure image fills the container
+                className="w-full h-full object-cover"
             />
         </div>
     );
 
-    // MOCKING CATEGORY
-    const mockCategory = course.category || (course.title.includes('Job') ? 'PATHWAY' : 'SKILLS');
+    const mockCategory = course.category || (course.title.includes("Job") ? "PATHWAY" : "SKILLS");
 
-
-    // Helper component for the metadata footer items
-    const FooterItem = ({ value, label, icon: Icon, isCertified = false }: { value: number | string, label: string, icon: any, isCertified?: boolean }) => (
+    const FooterItem = ({
+        value,
+        label,
+        icon: Icon,
+        isCertified = false,
+    }: {
+        value: number | string;
+        label: string;
+        icon: any;
+        isCertified?: boolean;
+    }) => (
         <div className="flex items-center text-sm">
-            <Icon size={14} className={`mr-1 ${isCertified ? 'text-green-500' : 'text-gray-500 dark:text-gray-400'}`} />
-            <Typography variant="body2" className="text-xs font-medium text-gray-700 dark:text-gray-300">
+            <Icon
+                size={14}
+                className={`mr-1 ${isCertified ? "text-green-500" : "text-gray-500 dark:text-gray-400"
+                    }`}
+            />
+            <Typography
+                variant="body2"
+                className="text-xs font-medium text-gray-700 dark:text-gray-300"
+            >
                 <span className="font-bold mr-0.5">{value}</span> {label}
             </Typography>
         </div>
     );
 
-
     return (
         <Box
-            className={`
-                bg-white dark:bg-gray-800 
-                rounded-xl 
-                shadow-sm 
-                hover:shadow-lg 
-                transition-all 
-                duration-300 
-                flex flex-col 
-                overflow-hidden
-            `}
-            sx={{
-                border: '1px solid',
-                borderColor: 'divider',
-            }}
+            className="
+        bg-white dark:bg-gray-800 
+        rounded-xl shadow-sm hover:shadow-lg 
+        transition-all duration-300 flex flex-col overflow-hidden
+      "
+            sx={{ border: "1px solid", borderColor: "divider" }}
         >
             {/* 1. Main Content Area */}
             <div className="p-5 flex flex-col flex-grow">
-
-                {/* Visual, Category, and Title */}
+                {/* Visual + Title */}
                 <div className="flex items-start mb-3">
                     <CourseVisual />
-
                     <div className="flex flex-col min-w-0 flex-grow">
-                        {/* Category (Smaller, muted text) */}
                         <Typography
                             variant="overline"
                             className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-0.5"
                         >
                             {mockCategory}
                         </Typography>
-
-                        {/* Title (Small, bold) */}
                         <Typography
                             variant="body1"
                             component="h3"
@@ -135,69 +144,77 @@ export default function CourseCard({ course }: CourseCardProps) {
                     </div>
                 </div>
 
-                {/* Description and Action/Progress */}
+                {/* Content section */}
                 <div className="flex flex-col flex-grow pt-2">
-                    {/* NEW PROGRESS BAR */}
+                    {mode === "owned" ? (
+                        <>
+                            {/* Progress + Action */}
+                            <div className="flex items-center justify-between mt-1 mb-3">
+                                <div className="flex items-center flex-1 gap-2">
+                                    <LinearProgress
+                                        variant="determinate"
+                                        value={progressPercent}
+                                        sx={{
+                                            width: "70%",
+                                            height: 4,
+                                            borderRadius: 2,
+                                            backgroundColor: "rgba(0,0,0,0.05)",
+                                            "& .MuiLinearProgress-bar": {
+                                                backgroundColor: primaryProgressColor,
+                                            },
+                                        }}
+                                    />
+                                    <p className="text-[12px]">{progressPercent}%</p>
+                                </div>
 
-
-
-                    {/* Progress Percentage and Action Button (Aligned) */}
-                    <div className="flex items-center justify-between mt-1 mb-3">
-
-
-                        {/* Progress */}
-                        <div className="flex items-center flex-1 gap-2">
-                            <LinearProgress
-                                variant="determinate"
-                                value={progressPercent}
-                                sx={{
-                                    width: '70%'
-                                    , height: 4, // Very thin bar
-                                    borderRadius: 2,
-                                    backgroundColor: 'rgba(0,0,0,0.05) dark:rgba(255,255,255,0.1)',
-
-                                    '& .MuiLinearProgress-bar': {
-                                        backgroundColor: primaryProgressColor,
+                                <button
+                                    onClick={
+                                        course.isCompleted
+                                            ? handleCertificateDownload
+                                            : handleActionClick
                                     }
-                                }}
-                            />
+                                    className={`flex items-center text-xs font-bold transition-colors ${accentColor} hover:underline`}
+                                >
+                                    {actionText}
+                                    <ActionIcon size={14} className="ml-1" />
+                                </button>
+                            </div>
 
-                            <p className="text-[12px]">
-                                {progressPercent}%
-                            </p>
-                        </div>
-
-                        {/* Resume/Start Button (Text with Icon) */}
-                        <button
-                            onClick={course.isCompleted ? handleCertificateDownload : handleActionClick}
-                            className={`flex items-center text-xs font-bold transition-colors ${accentColor} hover:underline`}
-                        >
-                            {course.isCompleted ? "Download" : (isStarted ? "Continue" : "Start")}
-                            <ActionIcon size={14} className="ml-1" />
-                        </button>
-                    </div>
-
-                    {/* Description */}
-                    <Typography
-                        variant="body2"
-                        className="text-sm text-gray-600 dark:text-gray-400 line-clamp-4"
-                        sx={{ minHeight: '6rem' }}
-                    >
-                        {course.isCompleted
-                            ? "This course is complete. You can download your certificate and review the materials."
-                            : "Master this skill through hands-on projects, expert guidance, and detailed curriculum designed to get you job-ready." // REPLACED TEXT HERE
-                        }
-                    </Typography>
+                            <Typography
+                                variant="body2"
+                                className="text-sm text-gray-600 dark:text-gray-400 line-clamp-4"
+                                sx={{ minHeight: "6rem" }}
+                            >
+                                {course.isCompleted
+                                    ? "This course is complete. You can download your certificate and review the materials."
+                                    : "Master this skill through hands-on projects, expert guidance, and detailed curriculum designed to get you job-ready."}
+                            </Typography>
+                        </>
+                    ) : (
+                        <>
+                            {/* For Recommended */}
+                            <Typography
+                                variant="body2"
+                                className="text-sm text-gray-600 dark:text-gray-400 line-clamp-4 mb-4"
+                            >
+                                Unlock this course and continue your learning journey. Get access
+                                to all modules, badges, and a certificate upon completion.
+                            </Typography>
+                            <button
+                                onClick={handleActionClick}
+                                className="w-full py-2 px-4 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition mt-5"
+                            >
+                                Purchase
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 
-            {/* 2. Metadata Footer (Matching the gray background strip) */}
+            {/* Footer */}
             <Box className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700">
-                {/* Modules (Using totalModules) */}
                 <FooterItem value={course.totalModules || 10} label="modules" icon={Package} />
-                {/* Chapters (Using totalBadges for a mock chapter count) */}
                 <FooterItem value={course.totalBadges || 14} label="chapters" icon={FileText} />
-                {/* Certificates (Using hasCertificate for 1 or 0) */}
                 <FooterItem
                     value={course.hasCertificate ? "1" : "0"}
                     label="certificate"

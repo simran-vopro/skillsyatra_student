@@ -25,6 +25,7 @@ import {
     Line,
 } from "recharts";
 import ActivityScheduleSection from "./ActivityScheduleSection";
+import { useNavigate } from "react-router";
 
 // ------------------------------------------------------------------
 // 📚 DUMMY DATA (ALIGNED WITH PROFESSIONAL DESIGN + TIER LOGIC)
@@ -143,12 +144,17 @@ const CustomHoursTooltip = ({ active, payload }: any) => {
 
 // ---
 
-// NEW Component: Row to show current course progress (For Tier 1)
 const CourseProgressRow = ({ course, tierName }: { course: typeof tierData[0]['courses'][0], tierName: string }) => {
+    const navigate = useNavigate();
+
     // Determine progress color based on completion
     const progressColor = course.progress === 100 ? 'bg-green-500' : 'bg-indigo-600';
     const textColor = course.progress === 100 ? 'text-green-600' : 'text-indigo-600';
     const isCompleted = course.progress === 100;
+
+    const handleResumeClick = () => {
+        navigate(`/course/${course.id}/learn`);
+    };
 
     return (
         <div className="flex items-center justify-between py-3 border-b border-gray-100 text-sm">
@@ -159,7 +165,7 @@ const CourseProgressRow = ({ course, tierName }: { course: typeof tierData[0]['c
             </div>
 
             {/* Progress Bar */}
-            <div className="w-1/2">
+            <div className="w-1/2 pr-4">
                 <div className="h-2 bg-gray-200 rounded-full">
                     <div
                         className={`h-full rounded-full ${progressColor} transition-all duration-500`}
@@ -168,14 +174,26 @@ const CourseProgressRow = ({ course, tierName }: { course: typeof tierData[0]['c
                 </div>
             </div>
 
-            {/* Status / Percentage */}
-            <div className={`w-1/6 text-right font-bold flex items-center justify-end gap-1 ${textColor}`}>
-                {isCompleted ? (
-                    <>
-                        <CheckCircle size={16} /> COMPLETED
-                    </>
-                ) : (
-                    `${course.progress}%`
+            {/* Status / Percentage + Resume */}
+            <div className="w-1/6 flex flex-col items-end gap-1 text-right font-bold">
+                <span className={textColor}>
+                    {isCompleted ? (
+                        <>
+                            <CheckCircle size={16} className="inline mr-1" /> COMPLETED
+                        </>
+                    ) : (
+                        `${course.progress}%`
+                    )}
+                </span>
+
+                {/* Resume button only if course not completed */}
+                {!isCompleted && (
+                    <button
+                        onClick={handleResumeClick}
+                        className="text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700 transition"
+                    >
+                        Resume
+                    </button>
                 )}
             </div>
         </div>
